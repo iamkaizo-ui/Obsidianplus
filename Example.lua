@@ -1,11 +1,62 @@
-
 -- example script by https://github.com/mstudio45/LinoriaLib/blob/main/Example.lua and modified by deivid
--- You can suggest changes with a pull request or something
+-- Patched Example: this single file applies all UI changes to the library
+-- at runtime, so you can just run it without any other local files.
+-- No readfile needed, falls back to the GitHub repo.
 
 local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
-local Library = loadstring(game:HttpGet(repo .. "Library.lua"))()
-local ThemeManager = loadstring(game:HttpGet(repo .. "addons/ThemeManager.lua"))()
-local SaveManager = loadstring(game:HttpGet(repo .. "addons/SaveManager.lua"))()
+
+-- Loads local files first (so your local Library.lua changes are used),
+-- and falls back to the GitHub repo if readfile is unavailable.
+local function LoadFile(Path)
+	if isfile and isfile(Path) then
+		return readfile(Path)
+	end
+
+	return game:HttpGet(repo .. Path)
+end
+
+local function EscapeMagic(S)
+	return S:gsub("([%^%$%(%)%%%.%[%]%*%+%-%?])", "%%%1")
+end
+
+local function Patch(Code, Changes)
+	for _, Change in ipairs(Changes) do
+		local NewCode, Count = Code:gsub(EscapeMagic(Change[1]), Change[2])
+
+		if Count == 0 then
+			warn("[Example] Patch NOT applied:", Change[1])
+		else
+			Code = NewCode
+		end
+	end
+
+	return Code
+end
+local LibraryCode = Patch(LoadFile("Library.lua"), {
+	{ "DropdownTransitionInfo = TweenInfo.new(0.18,", "DropdownTransitionInfo = TweenInfo.new(0.1," },
+	{ "Dropdown = false", "Dropdown = true" },
+	{ "BackgroundImage = \"\",", "BackgroundImage = \"\",\n        Glow = true," },
+	{ "BackgroundImage = \"\"\n    },", "BackgroundImage = \"\",\n        WindowGlow = true,\n    }," },
+	{ "Library.Scheme.Font = WindowInfo.Font", "Library.Scheme.Font = WindowInfo.Font\n    Library.Scheme.WindowGlow = WindowInfo.Glow" },
+	{ "Library:MakeLine(MainFrame, {\n            Position = UDim2.fromOffset(0, 48),\n            Size = UDim2.new(1, 0, 0, 1),\n        })\n\n        DividerLine = New(\"Frame\", {", "Library:MakeLine(MainFrame, {\n            Position = UDim2.fromOffset(0, 48),\n            Size = UDim2.new(1, 0, 0, 1),\n        })\n\n        Glow = New(\"ImageLabel\", {\n            BackgroundTransparency = 1,\n            Position = UDim2.fromOffset(-20.8, -20.8),\n            Size = UDim2.new(1, 41.6, 1, 41.6),\n            ZIndex = -1,\n            Image = \"rbxassetid://88645182616510\",\n            ImageColor3 = function()\n                return Library.Scheme.AccentColor\n            end,\n            Visible = Library.Scheme.WindowGlow,\n            Parent = MainFrame,\n        })\n\n        DividerLine = New(\"Frame\", {" },
+	{ "end\n\nfunction Library:UpdateNotificationPositions", "end\n\nfunction Library:SetGlow(State)\n    Library.Scheme.WindowGlow = State\n    if Library.Window and Glow then\n        Glow.Visible = State\n    end\n\n    Library:UpdateColorsUsingRegistry()\nend\n\nfunction Library:UpdateNotificationPositions" },
+	{ "function Window:SetFooter(Footer: string)", "function Window:SetGlow(State: boolean)\n        return Library:SetGlow(State)\n    end\n\n    function Window:SetFooter(Footer: string)" },
+	{ "TabButton.MouseEnter:Connect(function()\n            Tab:Hover(true)\n        end)", "TabButton.MouseEnter:Connect(function()\n            Tab:Hover(true)\n            if not IsCompact then\n                return\n            end\n\n            for _, TabEntry in Library.TabButtons do\n                if TabEntry.Button == TabButton and not TabEntry.Tooltip then\n                    TabEntry.Tooltip = Library:AddTooltip(Name, nil, TabButton)\n                end\n            end\n        end)" },
+	{ "table.insert(Library.TabButtons, {\n                Label = TabLabel,\n                Padding = ButtonPadding,\n                Icon = TabIcon,\n            })", "table.insert(Library.TabButtons, {\n                Button = TabButton,\n                Label = TabLabel,\n                Padding = ButtonPadding,\n                Icon = TabIcon,\n                Tooltip = nil,\n            })" },
+	{ "for _, Button in Library.TabButtons do\n            if not Button.Icon then\n                continue\n            end", "for _, Button in Library.TabButtons do\n            if Button.Tooltip then\n                Button.Tooltip.Disabled = not IsCompact\n            end\n\n            if not Button.Icon then\n                continue\n            end" },
+})
+
+local ThemeManagerCode = Patch(LoadFile("addons/ThemeManager.lua"), {
+	{ "local FontColor = CreateColorOption(\"Font color\", \"FontColor\")", "local FontColor = CreateColorOption(\"Font color\", \"FontColor\")\n\n    Themesbox:AddToggle(\"WindowGlow\", {\n        Text = \"Window Glow\",\n        Default = ThemeManager.Library.Scheme.WindowGlow\n    })\n\n    ThemeManager.Library.Toggles.WindowGlow:OnChanged(function(Value)\n        ThemeManager.Library:SetGlow(Value)\n    end)" },
+})
+
+local SaveManagerCode = Patch(LoadFile("addons/SaveManager.lua"), {
+	{ "ConfigurationBox:AddButton(\"Refresh list\", RefreshList)\n\n    --// Autoload Config", "ConfigurationBox:AddButton(\"Refresh list\", RefreshList)\n\n    ConfigurationBox:AddDivider()\n\n    --// Import\n    ConfigurationBox:AddInput(\"SaveManager_ImportData\", { Text = \"Import Configuration:\" })\n    ConfigurationBox:AddButton(\"Import Config\", function()\n        local ConfigData = SaveManager.Library.Options.SaveManager_ImportData.Value\n\n        if IsStringEmpty(ConfigData) then\n            SaveManager.Library:Notify({\n                Title = \"Warning\",\n                Description = \"No config data provided.\",\n                Time = 3,\n                Icon = \"triangle-alert\"\n            })\n            return\n        end\n\n        local Success, ErrorMessage = SaveManager:ImportConfig(ConfigData)\n        if not Success then\n            SaveManager.Library:Notify({\n                Title = \"Error\",\n                Description = string.format(\"Failed to import config: %%s.\", ErrorMessage),\n                Icon = \"circle-x\"\n            })\n            return\n        end\n\n        SaveManager.Library:Notify({\n            Title = \"Success\",\n            Description = \"Config imported and applied.\",\n            Time = 3,\n            Icon = \"circle-check\"\n        })\n    end)\n\n    --// Autoload Config" },
+})
+local Library = loadstring(LibraryCode)()
+local ThemeManager = loadstring(ThemeManagerCode)()
+local SaveManager = loadstring(SaveManagerCode)()
+
 
 local Options = Library.Options
 local Toggles = Library.Toggles
@@ -23,12 +74,28 @@ local Window = Library:CreateWindow({
 	-- Position and Size are also valid options here
 	-- but you do not need to define them unless you are changing them :)
 
+	-- Compact = true -> tabs start hidden/collapsed (only icons are shown in the sidebar)
+	-- EnableSidebarResize = true -> you can drag the sidebar divider to expand/collapse the tabs
+	-- When the sidebar is collapsed, hovering over a tab icon shows the tab name
+	Compact = true,
+	EnableSidebarResize = true,
 	Title = "mspaint",
 	Footer = "version: example",
 	Icon = 95816097006870,
 	NotifySide = "Right",
 	ShowCustomCursor = true,
+
+	-- NEW: Window Glow
+	Glow = true,
+
+	-- NEW: smooth dropdown animation
+	Animations = {
+		Dropdown = true,
+	},
 })
+
+-- NEW: smooth dropdown animation, 0.1s (default is 0.2s)
+Library.DropdownTransitionInfo = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
 -- CALLBACK NOTE:
 -- Passing in callback functions via the initial element parameters (i.e. Callback = function(Value)...) works
@@ -39,9 +106,9 @@ local Window = Library:CreateWindow({
 -- You can find more icons in https://lucide.dev/
 local Tabs = {
 	-- Creates a new tab titled Main
-	Main = Window:AddTab("Main", "user"),
+	Main = Window:AddTab("Main", "user", "Main features"), -- 3rd arg = tab name on hover
 	Key = Window:AddKeyTab("Key System"),
-	["UI Settings"] = Window:AddTab("UI Settings", "settings"),
+	["UI Settings"] = Window:AddTab("UI Settings", "settings", "UI settings and configurations"), -- 3rd arg = tab name on hover
 }
 
 
@@ -434,36 +501,6 @@ Options.MyMultiDropdown:SetValue({
 	is = true,
 })
 
---[[
-	Dictionary Values (key = identity, value = display label)
-
-	Use this when you need stable backend IDs in .Value and OnChanged while showing
-	human-readable labels in the UI. Multi dropdowns still store { [key] = true }.
-]]
-DropdownGroupBox:AddDropdown("MyDictionaryDropdown", {
-	Values = {
-		item01 = "Excalibur",
-		item05 = "Aegis Shield",
-		item06 = "Wooden Club",
-	},
-	Default = "item01", -- must be a key, not the label
-	Multi = true,
-
-	Text = "A dictionary dropdown",
-	Tooltip = "Keys are selected; values are labels only",
-
-	-- DisabledValues and ValueImages may use either the key or the label
-	DisabledValues = { "item05" },
-
-	Callback = function(Value)
-		print("[cb] Dictionary dropdown got changed:")
-		for Key in Value do
-			local Label = Options.MyDictionaryDropdown.Values[Key]
-			print(Key, "->", Label)
-		end
-	end
-})
-
 DropdownGroupBox:AddDropdown("MyDisabledDropdown", {
 	Values = { "This", "is", "a", "dropdown" },
 	Default = 1, -- number index of the value / string
@@ -705,6 +742,14 @@ Library:AddDraggableLabel("This is a Draggable Label")
 
 -- UI Settings
 local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Menu", "wrench")
+
+	MenuGroup:AddToggle("WindowGlowToggle", { -- NEW: Window Glow on/off
+		Text = "Window Glow",
+		Default = true,
+		Callback = function(Value)
+			Library:SetGlow(Value)
+		end,
+	})
 
 MenuGroup:AddToggle("KeybindMenuOpen", {
 	Default = Library.KeybindFrame.Visible,
