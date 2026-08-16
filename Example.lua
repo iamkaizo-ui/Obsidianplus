@@ -3,7 +3,7 @@
 -- at runtime, so you can just run it without any other local files.
 -- No readfile needed, falls back to the GitHub repo.
 
-local repo = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
+local repo = "https://raw.githubusercontent.com/iamkaizo-ui/Obsidianplus/main/"
 
 -- Loads local files first (so your local Library.lua changes are used),
 -- and falls back to the GitHub repo if readfile is unavailable.
